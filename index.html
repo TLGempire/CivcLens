@@ -127,9 +127,7 @@ body { font-family: var(--body); background: var(--cream); color: var(--text); m
 .hero::before {
   content: '';
   position: absolute; inset: 0;
-  background-image: linear-gradient(rgba(201,168,76,0.04) 1px, transparent 1px),
-                    linear-gradient(90deg, rgba(201,168,76,0.04) 1px, transparent 1px);
-  background-size: 48px 48px; pointer-events: none;
+  pointer-events: none;
 }
 .hero-left { padding-bottom: 64px; position: relative; z-index: 2; }
 .hero-eyebrow {
@@ -216,6 +214,26 @@ body { font-family: var(--body); background: var(--cream); color: var(--text); m
 }
 .search-input-wrap input::placeholder { color: var(--text-muted); }
 .search-filters { display: flex; gap: 8px; }
+
+/* Topic filter band */
+.topic-band {
+  background: var(--cream); border-bottom: 1px solid var(--cream-dark);
+  padding: 12px 40px; display: flex; align-items: center; gap: 14px;
+}
+.topic-band-label {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--text-muted); flex-shrink: 0; font-weight: 600;
+}
+.topic-pills { display: flex; gap: 7px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.topic-pills::-webkit-scrollbar { height: 0; }
+.topic-pill {
+  padding: 6px 13px; border-radius: 20px; font-size: 12px; font-weight: 500;
+  border: 1.5px solid var(--cream-dark); background: var(--white);
+  color: var(--text-sec); cursor: pointer; white-space: nowrap; flex-shrink: 0;
+  transition: all 0.15s;
+}
+.topic-pill.active { background: var(--gold); border-color: var(--gold); color: var(--navy); font-weight: 600; }
+.topic-pill:hover:not(.active) { border-color: var(--slate-light); }
 .filter-pill {
   padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 500;
   border: 1.5px solid var(--cream-dark); background: var(--white);
@@ -720,6 +738,7 @@ body { font-family: var(--body); background: var(--cream); color: var(--text); m
   .search-filters { overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 2px; }
   .search-filters::-webkit-scrollbar { display: none; }
   .filter-pill { white-space: nowrap; flex-shrink: 0; }
+  .topic-band { padding: 10px 18px; }
 
   /* Main + sidebar */
   .main { padding: 20px 16px; gap: 20px; }
@@ -862,10 +881,19 @@ body { font-family: var(--body); background: var(--cream); color: var(--text); m
         <span style="width:7px;height:7px;background:#1A6B3A;border-radius:50%;display:inline-block;"></span> Utah State
       </div>
       <div class="filter-pill" onclick="setFilter('recent',this)">📅 This Week</div>
+      <div class="filter-pill" onclick="setFilter('saved',this)">🔖 Saved</div>
     </div>
     <div class="search-input-wrap">
       <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="m16.5 16.5 4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
       <input placeholder="Search bills by topic, keyword, bill number, or sponsor…" oninput="handleSearch(this.value)">
+    </div>
+  </div>
+
+  <!-- Topic filter row -->
+  <div class="topic-band" id="topic-band">
+    <span class="topic-band-label">Topics:</span>
+    <div class="topic-pills" id="topic-pills">
+      <div class="topic-pill active" onclick="setTopic('all',this)">All Topics</div>
     </div>
   </div>
 
@@ -1229,6 +1257,7 @@ const CONFIG = {
    STATE
 ═══════════════════════════════════════ */
 let currentFilter = 'all';
+let currentTopic = 'all';
 let allBills = [];
 let userVotes = JSON.parse(localStorage.getItem('cl_votes') || '{}');
 let savedBills = JSON.parse(localStorage.getItem('cl_saved') || '[]');
@@ -1255,7 +1284,7 @@ function showPage(page) {
 ═══════════════════════════════════════ */
 const DEMO_BILLS = [
   {
-    id: 'demo-1', level: 'federal', number: 'S.4821', chamber: 'U.S. Senate',
+    id: 'demo-1', level: 'federal', number: 'S.4821', chamber: 'U.S. Senate', topic: 'Technology',
     title: 'Rural Broadband Expansion & Digital Equity Act',
     summary: 'Allocates $42 billion over five years to bring high-speed internet to rural and underserved areas. ISPs must meet affordability benchmarks — including a $30/month price cap for qualifying households — or forfeit federal subsidies.',
     status: 'signed', statusLabel: 'Signed into Law', date: 'Jun 12, 2026',
@@ -1283,7 +1312,7 @@ const DEMO_BILLS = [
     spendGrants: 52, spendAdmin: 28, spendOther: 20,
   },
   {
-    id: 'demo-2', level: 'state', number: 'HB 312', chamber: 'Utah House',
+    id: 'demo-2', level: 'state', number: 'HB 312', chamber: 'Utah House', topic: 'Environment',
     title: 'Water Rights Modernization & Drought Resilience Act',
     summary: "Overhauls Utah's century-old water-right allocation system. During declared drought emergencies, municipal and residential use would be prioritized over agricultural and industrial allocations.",
     status: 'pending', statusLabel: 'Awaiting Governor', date: 'Jun 10, 2026',
@@ -1310,7 +1339,7 @@ const DEMO_BILLS = [
     spendGrants: 0, spendAdmin: 100, spendOther: 0,
   },
   {
-    id: 'demo-3', level: 'federal', number: 'HR 7203', chamber: 'U.S. House',
+    id: 'demo-3', level: 'federal', number: 'HR 7203', chamber: 'U.S. House', topic: 'Energy',
     title: 'Clean Energy Tax Credit Extension Act',
     summary: 'Extends and expands the electric vehicle purchase credit, residential solar installation credit, and commercial clean energy investment credits through 2035. Adds new credits for geothermal heat pumps and battery storage systems.',
     status: 'signed', statusLabel: 'Signed into Law', date: 'Jun 7, 2026',
@@ -1383,12 +1412,27 @@ async function loadFeed() {
   if (!federalBills.length) federalBills = DEMO_BILLS;
   if (!stateBills.length)   stateBills   = DEMO_UTAH_BILLS;
 
-  allBills = [...federalBills, ...stateBills];
+  // Merge federal + state, then remove duplicates.
+  // A bill can appear more than once if it was ingested at different statuses
+  // or returned multiple times by the API. We keep only the first (most recent)
+  // occurrence of each unique bill number.
+  const merged = [...federalBills, ...stateBills];
+  const seen = new Set();
+  allBills = merged.filter(b => {
+    // Normalize the bill number to catch duplicates (strip spaces, dots, case)
+    const key = (b.number || b.id || '').toString().replace(/[\s.]/g, '').toUpperCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  const federalCount = allBills.filter(b => b.level === 'federal').length;
+  const stateCount   = allBills.filter(b => b.level === 'state').length;
 
   const totalCount = allBills.length;
   const sourceLabel = {
-    supabase: `Live data · ${federalBills.length} federal · ${stateBills.length} Utah state bills`,
-    live:     `Live data (first load) · ${federalBills.length} federal · ${stateBills.length} Utah`,
+    supabase: `Live data · ${federalCount} federal · ${stateCount} Utah state bills`,
+    live:     `Live data (first load) · ${federalCount} federal · ${stateCount} Utah`,
     demo:     `Demo mode · ${totalCount} sample bills`,
   }[source];
   document.getElementById('feed-meta-text').textContent = sourceLabel;
@@ -1396,6 +1440,7 @@ async function loadFeed() {
     source === 'demo' ? `${totalCount} demo` : '12,400+';
 
   renderBills(allBills);
+  populateTopicPills();
 }
 
 // Map a bill already stored in Supabase (summary pre-generated) into display format
@@ -1427,6 +1472,7 @@ function mapStoredBill(b) {
     senateYea: 0, senateNay: 0, senateAbs: 0, repVotes: [],
     cboTotal: b.cbo_total || 'TBD', cboCostPerHH: 'TBD', cboFunded: 'TBD', cboDeficit: 'TBD',
     spendGrants: 0, spendAdmin: 0, spendOther: 0,
+    topic: b.topic || null,
     summaryLoaded: true,   // already has summary from Supabase
     needsSummary: false,
   };
@@ -1479,7 +1525,10 @@ function mapUtahBill(b) {
 function renderBills(bills) {
   const feed = document.getElementById('bill-feed');
   if (!bills.length) {
-    feed.innerHTML = '<div class="loading-wrap"><div class="loading-text">No bills found for this filter.</div></div>';
+    const emptyMsg = currentFilter === 'saved'
+      ? '<div class="loading-wrap" style="text-align:center;"><div style="font-size:32px;margin-bottom:10px;">🔖</div><div class="loading-text" style="margin-bottom:6px;">No saved bills yet</div><div style="font-size:12px;color:var(--text-muted);max-width:280px;line-height:1.5;">Tap the bookmark icon on any bill to save it here for quick access later.</div></div>'
+      : '<div class="loading-wrap"><div class="loading-text">No bills found for this filter.</div></div>';
+    feed.innerHTML = emptyMsg;
     return;
   }
   feed.innerHTML = bills.map(b => billRowHTML(b)).join('');
@@ -1992,12 +2041,47 @@ function setFilter(filter, el) {
 }
 
 function getFilteredBills() {
-  if (currentFilter === 'all') return allBills;
-  if (currentFilter === 'recent') {
-    // Show all demo bills as "recent" for demo purposes
-    return allBills;
+  let bills = allBills;
+
+  // Level filter
+  if (currentFilter === 'saved') {
+    bills = bills.filter(b => savedBills.includes(b.id));
+  } else if (currentFilter === 'federal' || currentFilter === 'state') {
+    bills = bills.filter(b => b.level === currentFilter);
   }
-  return allBills.filter(b => b.level === currentFilter);
+  // 'all' and 'recent' don't filter by level
+
+  // Topic filter
+  if (currentTopic !== 'all') {
+    bills = bills.filter(b => (b.topic || '') === currentTopic);
+  }
+
+  return bills;
+}
+
+// Build the topic pills from whatever topics exist in the loaded bills
+function populateTopicPills() {
+  const topics = [...new Set(allBills.map(b => b.topic).filter(Boolean))].sort();
+  const container = document.getElementById('topic-pills');
+  if (!container) return;
+
+  // If no bills have topics yet, hide the whole band
+  const band = document.getElementById('topic-band');
+  if (!topics.length) { if (band) band.style.display = 'none'; return; }
+  if (band) band.style.display = 'flex';
+
+  let html = `<div class="topic-pill ${currentTopic==='all'?'active':''}" onclick="setTopic('all',this)">All Topics</div>`;
+  html += topics.map(t =>
+    `<div class="topic-pill ${currentTopic===t?'active':''}" onclick="setTopic('${t}',this)">${t}</div>`
+  ).join('');
+  container.innerHTML = html;
+}
+
+function setTopic(topic, el) {
+  currentTopic = topic;
+  document.querySelectorAll('.topic-pill').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  renderBills(getFilteredBills());
 }
 
 /* ═══════════════════════════════════════
@@ -2109,7 +2193,7 @@ async function fetchUtahBills() {
 /* Demo Utah bills — shown when the API is unavailable */
 const DEMO_UTAH_BILLS = [
   {
-    id: 'utah-HB312', level: 'state', state: 'Utah', number: 'HB 312', chamber: 'Utah House',
+    id: 'utah-HB312', level: 'state', state: 'Utah', number: 'HB 312', chamber: 'Utah House', topic: 'Environment',
     title: 'Water Rights Modernization & Drought Resilience Act',
     summary: "Overhauls Utah's century-old water-right allocation system. During declared drought emergencies, municipal and residential use would be prioritized over agricultural and industrial allocations.",
     status: 'pending', statusLabel: 'Awaiting Governor', date: 'Jun 10, 2026',
@@ -2133,7 +2217,7 @@ const DEMO_UTAH_BILLS = [
     spendGrants: 0, spendAdmin: 100, spendOther: 0,
   },
   {
-    id: 'utah-SB142', level: 'state', state: 'Utah', number: 'SB 142', chamber: 'Utah Senate',
+    id: 'utah-SB142', level: 'state', state: 'Utah', number: 'SB 142', chamber: 'Utah Senate', topic: 'Education',
     title: 'Public Education Funding Formula Revision',
     summary: 'Revises the Weighted Pupil Unit formula used to allocate state education funding, increasing per-pupil spending by an average of 8% and adding new weights for students with disabilities and English language learners.',
     status: 'signed', statusLabel: 'Signed into Law', date: 'Mar 15, 2026',
@@ -2157,7 +2241,7 @@ const DEMO_UTAH_BILLS = [
     spendGrants: 85, spendAdmin: 10, spendOther: 5,
   },
   {
-    id: 'utah-HB198', level: 'state', state: 'Utah', number: 'HB 198', chamber: 'Utah House',
+    id: 'utah-HB198', level: 'state', state: 'Utah', number: 'HB 198', chamber: 'Utah House', topic: 'Housing',
     title: 'Affordable Housing Infrastructure & Zoning Reform Act',
     summary: 'Requires cities over 10,000 population to allow higher-density residential development within half a mile of major transit corridors, and establishes a $120M state infrastructure fund to support affordable housing construction.',
     status: 'signed', statusLabel: 'Signed into Law', date: 'Feb 28, 2026',
