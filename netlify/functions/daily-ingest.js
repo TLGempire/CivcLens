@@ -75,7 +75,19 @@ exports.handler = async function (event, context) {
   }
 
   // ── 3. FOR EACH BILL: skip if already summarized, else generate + store ──
+  // Remove duplicates before processing — the Congress API can return the
+  // same bill multiple times (e.g. at different action stages). Keep the first.
+  const uniqueBills = [];
+  const seenIds = new Set();
   for (const bill of bills) {
+    const key = (bill.number || bill.id || '').toString().replace(/[\s.]/g, '').toUpperCase();
+    if (seenIds.has(key)) continue;
+    seenIds.add(key);
+    uniqueBills.push(bill);
+  }
+  log.push(`${uniqueBills.length} unique bills after dedup (from ${bills.length})`);
+
+  for (const bill of uniqueBills) {
     // Check if already in Supabase with a summary
     let exists = false;
     try {
@@ -103,11 +115,12 @@ Respond ONLY with valid JSON (no markdown) in this exact format:
   "tldr": "One sentence, plain English, what this bill does. Max 30 words.",
   "summary": "A 2-3 paragraph plain-English summary covering what it does, who it affects, and key numbers.",
   "analysis": "A balanced policy analysis: what supporters say, what critics say, independent context. Strictly nonpartisan.",
+  "topic": "ONE topic from this exact list: Healthcare, Education, Taxes, Environment, Housing, Energy, Transportation, Public Safety, Economy, Civil Rights, Immigration, Agriculture, Technology, Veterans, Government Reform",
   "impactTiles": [
     {"icon":"emoji","label":"SHORT LABEL","value":"key stat","type":"positive|caution|neutral"}
   ]
 }
-Provide exactly 3 impactTiles showing the most relevant impacts.`;
+Choose the single best-fitting "topic" from the list. Provide exactly 3 impactTiles showing the most relevant impacts.`;
 
       const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
@@ -160,6 +173,7 @@ Provide exactly 3 impactTiles showing the most relevant impacts.`;
           full_summary: summary.summary,
           analysis: summary.analysis,
           tiles: summary.impactTiles || [],
+          topic: summary.topic || 'Government Reform',
           updated_at: new Date().toISOString(),
         }),
       });
