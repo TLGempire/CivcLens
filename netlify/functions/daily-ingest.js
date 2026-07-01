@@ -87,7 +87,18 @@ exports.handler = async function (event, context) {
   }
   log.push(`${uniqueBills.length} unique bills after dedup (from ${bills.length})`);
 
+  // To stay under Netlify's function time limit, only summarize a few NEW bills
+  // per run. Because already-summarized bills are skipped, running this a few
+  // times fills the database without ever timing out.
+  const MAX_NEW_PER_RUN = 3;
+
   for (const bill of uniqueBills) {
+    // Stop once we've summarized enough new bills this run
+    if (newBills >= MAX_NEW_PER_RUN) {
+      log.push(`Reached per-run limit of ${MAX_NEW_PER_RUN} new bills. Run again to continue.`);
+      break;
+    }
+
     // Check if already in Supabase with a summary
     let exists = false;
     try {
